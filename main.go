@@ -214,8 +214,7 @@ func createEntry(pool *pgxpool.Pool) gin.HandlerFunc {
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
-
+		log.Printf("⚠️  no .env file found, continuing with real ENV: %v", err)
 	}
 	ctx, stopCtx := context.WithTimeout(context.Background(), 10*time.Second)
 	defer stopCtx()
