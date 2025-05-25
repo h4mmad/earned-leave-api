@@ -15,7 +15,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
 )
 
 type EntryType string
@@ -136,10 +135,10 @@ func createEntry(pool *pgxpool.Pool) gin.HandlerFunc {
 }
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
+	// if err := godotenv.Load(); err != nil {
+	// 	log.Fatal("Error loading .env file")
 
-	}
+	// }
 
 	ctx, stopCtx := context.WithTimeout(context.Background(), 10*time.Second)
 	defer stopCtx()
