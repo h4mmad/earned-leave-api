@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,7 +31,7 @@ type Employee struct {
 }
 
 type Entry struct {
-	Id         *string   `json:"id"`
+	Id         string    `json:"id"`
 	EmployeeId string    `json:"employeeId" binding:"required"`
 	Date       string    `json:"date" binding:"required"`
 	Type       EntryType `json:"type" binding:"required"`
@@ -99,6 +100,83 @@ func getEmployees(pool *pgxpool.Pool) gin.HandlerFunc {
 
 	}
 }
+
+type EntryByYearMonthDayType struct {
+	Year    string    `json:"year"`
+	Month   string    `json:"month"`
+	Day     string    `json:"day"`
+	Type    EntryType `json:"type"`
+	EntryId string    `json:"entryId"`
+}
+
+// /api/employees/:employeeId/entries
+// SELECT
+//   EXTRACT(YEAR  FROM date)         AS year,
+//   EXTRACT(MONTH FROM date)         AS month,
+//   EXTRACT(DAY FROM date)           AS day,
+//   type,
+//   entry_id
+// FROM entries
+// WHERE employee_id = '1';
+//
+//
+// [
+//   {
+//     "year": "2037",
+//     "month": "8",
+//     "day": "29",
+//     "type": "WORKED"
+//   },
+//   {
+//     "year": "2037",
+//     "month": "8",
+//     "day": "1",
+//     "type": "LEAVE"
+//   }
+// ]
+
+func getEntriesByEmployeeID(p *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// read from url param
+		// check using regex or if employeeId is uuid, if not fail request early
+		employeeId, exists := c.Params.Get("employeeId")
+		if !(exists) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to read url param"})
+			return
+		}
+		fmt.Println(employeeId)
+
+		// Read the file after employeeId passes checks, as I/O ops cost resources
+		sql, err := os.ReadFile("./sql/get_entries_by_employee_id.sql")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to read SQL"})
+			return
+		}
+
+		// Create the query
+		rows, err := p.Query(c, string(sql), employeeId)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Read the rows
+		var entries []EntryByYearMonthDayType
+		for rows.Next() {
+			var e EntryByYearMonthDayType
+
+			if err := rows.Scan(&e.Year, &e.Month, &e.Day, &e.Type, &e.EntryId); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			fmt.Println(e)
+			entries = append(entries, e)
+		}
+
+		c.JSON(http.StatusOK, entries)
+	}
+}
+
 func createEntry(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sql, err := os.ReadFile("./sql/create_entry.sql")
@@ -135,14 +213,12 @@ func createEntry(pool *pgxpool.Pool) gin.HandlerFunc {
 }
 
 func main() {
-	// if err := godotenv.Load(); err != nil {
-	// 	log.Fatal("Error loading .env file")
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("Error loading .env file")
 
-	// }
-
+	}
 	ctx, stopCtx := context.WithTimeout(context.Background(), 10*time.Second)
 	defer stopCtx()
-	pool := InitPool(ctx, os.Getenv("DATABASE_URL"))
 
 	router := gin.Default()
 	router.GET("/ping", func(ctx *gin.Context) {
@@ -153,10 +229,13 @@ func main() {
 	})
 
 	{
+		pool := InitPool(ctx, os.Getenv("DATABASE_URL"))
+
 		api := router.Group("/api")
 		api.GET("/employees", getEmployees(pool))
 		api.POST("/entries", createEntry(pool))
+		api.GET("/employees/:employeeId/entries", getEntriesByEmployeeID(pool))
 
 	}
-	router.Run()
+	router.Run(":8080")
 }
