@@ -158,5 +158,5 @@ func main() {
 		api.POST("/entries", createEntry(pool))
 
 	}
-	router.Run(":8080")
+	router.Run()
 }
